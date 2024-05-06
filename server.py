@@ -1,10 +1,14 @@
 import socket
 import threading
+
+#arrays to track all clients connected and their usernames
+clients = []
+names = []
+
 # create a socket object
 listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 ip = "127.0.0.1"
 port = 8002
-
 # bind the socket to a specific address and port
 listen_socket.bind((ip, port))
 # listen for incoming connections
@@ -12,10 +16,19 @@ listen_socket.listen(0)
 print(f"Listening on {ip}:{port}")
 
 def connectClient(client_socket, client_address):
+     # receive username from the client
+    name = client_socket.recv(1024)
+    name = name.decode("utf-8")
+    names.append(name)
+    print(names)
     # accept incoming connections
-    print(f"Accepted connection from {client_address[0]}:{client_address[1]}")
-     # receive data from the client
+    print(f"Accepted connection from {name}")
+
+    response = "[SERVER]: Connected"
+    client_socket.send(response.encode("utf-8"))
+
     while True:
+
         request = client_socket.recv(1024)
         request = request.decode("utf-8")  # convert bytes to string
 
@@ -27,18 +40,23 @@ def connectClient(client_socket, client_address):
             client_socket.send("closed".encode("utf-8"))
             break
 
-        print(f"Received: {request}")
+        print(request)
 
-        response = "accepted".encode("utf-8")  # convert string to bytes
+        response = "[SERVER]: received".encode("utf-8")  # convert string to bytes
         # convert and send accept response to the client
         client_socket.send(response)
 
     # close connection socket with the client
+    clients.remove(client_socket)
+    names.remove(name)
     client_socket.close()
-    print("Connection to Alice closed")
+    print(f"Connection to {name} closed")
+
 
 if __name__ == "__main__":
     while True:
         client_socket, client_address = listen_socket.accept()
+        clients.append(client_socket)
+        print(clients)
         thread = threading.Thread(target=connectClient,args=(client_socket, client_address))
         thread.start()
