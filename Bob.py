@@ -45,23 +45,32 @@ def connectServer():
     response = sendSocket.recv(1024)
     response = response.decode("utf-8")
     print(response)
-
     while True:
-        # input message and send it to the server
-        msg = input("Enter message to server: ")
-        if not msg == "close":
-            msg = "[" + name + "]: " + msg
-        sendSocket.send(msg.encode("utf-8")[:1024])
+        if not("No available clients" in response):
+            print(response)
+            msg = input("Choose who to message: ")
+            index = 0
+            if not msg == "close":
+                index = eval(msg) - 1
+                
+            sendSocket.send(msg.encode("utf-8")[:1024])
 
-        # receive message from the server
-        response = sendSocket.recv(1024)
-        response = response.decode("utf-8")
+            # receive message from the server
+            response = sendSocket.recv(1024)
+            response = response.decode("utf-8")
+            print(response)
+            msg = input()
+            sendSocket.send(msg.encode("utf-8")[:1024])
 
-        # if server sent us "closed" in the payload, we break out of the loop and close our socket
-        if response.lower() == "closed":
-            break
-
-        print(response)
+            response = sendSocket.recv(1024)
+            response = response.decode("utf-8")
+            print(response)
+            # if server sent us "closed" in the payload, we break out of the loop and close our socket
+            if response.lower() == "closed":
+                break
+        else:
+            response = sendSocket.recv(1024)
+            response = response.decode("utf-8")
 
     # close client socket (connection to the server)
     sendSocket.close()
