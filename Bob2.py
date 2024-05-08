@@ -15,12 +15,10 @@ def listen():
     client_socket, client_address = listen_socket.accept()
     msg = ""
     while not msg == "Q":
-        try:
-            msg = client_socket.recv(1024)
-            msg = msg.decode("utf-8")
+        msg = client_socket.recv(1024)
+        msg = msg.decode("utf-8")
+        if not(msg=="Q"):
             print("\n[Bob]:" + msg)
-        except:
-            msg=""
     return
 
 def connect():
