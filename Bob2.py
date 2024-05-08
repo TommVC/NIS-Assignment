@@ -38,7 +38,7 @@ def connect():
     msg = ""
     while not msg == "Q":
         msg = send(sendSocket)
-        time.sleep(2)
+        time.sleep(1)
     return
             
 

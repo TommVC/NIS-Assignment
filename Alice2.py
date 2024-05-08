@@ -33,12 +33,12 @@ def connect():
             break
         except:
             print("No one to connect to")
-            time.sleep(10)
+            time.sleep(5)
 
     msg = ""
     while not msg == "Q":
         msg = send(sendSocket)
-        time.sleep(2)
+        time.sleep(1)
     return
             
 
