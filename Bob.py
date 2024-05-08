@@ -30,7 +30,7 @@ def connect_ca():
     print("Connection to CA closed")
 
 
-def connectServer():
+def connect():
     # create a socket object
     sendSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -76,4 +76,4 @@ def connectServer():
     sendSocket.close()
     print("Connection to server closed")
 
-connectServer()
+connect()
