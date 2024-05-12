@@ -47,6 +47,7 @@ def send(skt):
     skt.send(msg.encode("utf-8"))
     return msg
 
+#main
 def main():
     listenThread = threading.Thread(target=listen)
     listenThread.start()
