@@ -83,9 +83,52 @@ def connect():
             time.sleep(5)
 
     msg = ""
-    while not msg == "Q":
-        msg = send(sendSocket)
-        time.sleep(1)
+#    while not msg == "Q":
+#        msg = send(sendSocket)
+#        time.sleep(1)
+    return
+
+
+def verify_outgoing(sskt):
+    try:
+        key_pair = rsa.generate_key_pair(1024)
+        publicKey = key_pair["public"]
+        privateKey = key_pair["private"]
+        keyModulus = key_pair["modulus"]
+
+        msg = "I am Alice"
+        sskt.send(msg.encode("utf-8"))
+
+        receive = sskt.recv(1024)
+        nonce = receive.decode("utf-8")  # receive nonce
+        print("Received nonce: " + nonce)
+
+        encrypted_nonce = rsa.encrypt(nonce, privateKey, keyModulus)  # Encrypt with private key
+        msg = encrypted_nonce
+        sskt.send(msg.encode("utf-8"))  # send encrypted nonce
+        print("Sent nonce: " + msg)
+        time.sleep(2)
+        msg = "END"
+        sskt.send(msg.encode("utf-8"))  # specify end of encrypted nonce
+
+        receive = sskt.recv(1024)
+        receive = receive.decode("utf-8")  # receive request
+        print("Received message: " + receive)
+
+        publicKey = str(publicKey)  # Only strings can be encoded
+        keyModulus = str(keyModulus)
+
+        msg = publicKey
+        sskt.send(msg.encode("utf-8"))  # send public key
+        print("Public key sent: " + msg)
+        time.sleep(2)  # So they are in two different messages
+        msg = keyModulus
+        sskt.send(msg.encode("utf-8"))  # send key modulus
+        print("Public modulus sent: " + msg)
+
+    except Exception as e:
+        print(e)
+
     return
 
 
@@ -138,8 +181,8 @@ def send(skt):
     return msg
 
 def main():
-    listenThread = threading.Thread(target=listen)
-    listenThread.start()
+#    listenThread = threading.Thread(target=listen)
+#    listenThread.start()
     connectThread = threading.Thread(target=connect)
     connectThread.start()
 
