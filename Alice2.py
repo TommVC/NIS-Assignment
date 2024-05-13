@@ -35,6 +35,7 @@ def listen():
     return
 
 def connect():
+    triedConnection = False
     while True:
         try:
             sendSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -45,8 +46,10 @@ def connect():
             print("Connected")
             break
         except:
-            print("No one to connect to")
-            time.sleep(5)
+            if not triedConnection:
+                print("No one to connect to")
+                triedConnection = True
+            time.sleep(2)
     
     #send secret integer for diffie hellman
     secInt = diffieHellman.getSecretInteger()
@@ -61,11 +64,13 @@ def connect():
             
 
 def sendMessage(skt):
-    msg = input("Send a message to Bob: ")
     sharedKey = diffieHellman.getSecretKey()
-    msg = AES.encrypt(msg, str(sharedKey))
-    print("Encrypted Message: " + str(msg))
-    skt.send(msg)
+    msg=""
+    if sharedKey:
+        msg = input("Send a message to Bob: ")
+        msg = AES.encrypt(msg, str(sharedKey))
+        print("Encrypted Message: " + str(msg))
+        skt.send(msg)
     return msg
 
 def main():
