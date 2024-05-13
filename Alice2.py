@@ -1,14 +1,11 @@
 import socket
 import threading
 import time
-import base64
-import hashlib
-from Cryptodome.Cipher import AES
-import DiffieHellman
+from DiffieHellman import *
+import AES
 
-diffieHellman = DiffieHellman.DiffieHellman()
+diffieHellman = DiffieHellman()
 #print("PrivInt:", diffieHellman.privNum)
-sharedKey = None
 def listen():
     listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     ip = "127.0.0.1"
@@ -26,13 +23,15 @@ def listen():
     diffieHellman.generateSecretKey(secNum)
     sharedKey = diffieHellman.getSecretKey()
     #print("SK:" + str(sharedKey))
+    print("Shared Key generated")
 
     msg = ""
     while not msg == "Q":
         msg = client_socket.recv(1024)
         msg = msg.decode("utf-8")
+        msg = AES.decrypt(msg, str(sharedKey))
         if not(msg=="Q"):
-            print("\n[Bob]:" + msg)
+            print("\n[Bob]:" + msg.decode("utf-8"))
     return
 
 def connect():
@@ -63,7 +62,10 @@ def connect():
 
 def sendMessage(skt):
     msg = input("Send a message to Bob: ")
-    skt.send(msg.encode("utf-8"))
+    sharedKey = diffieHellman.getSecretKey()
+    msg = AES.encrypt(msg, str(sharedKey))
+    print("Encrypted Message: " + str(msg))
+    skt.send(msg)
     return msg
 
 def main():
