@@ -14,6 +14,9 @@ def listen():
     listen_socket.listen(0)
     print(f"Listening on {ip}:{port}")
     client_socket, client_address = listen_socket.accept()
+    name, bob_key = verifyIncoming(client_socket)  # Verifies incoming connection (is Alice actually Alice)
+    #    verifyCA(name, bob_key)
+    print("finished verification")
     msg = ""
     while not msg == "Q":
         msg = client_socket.recv(1024)
@@ -21,6 +24,47 @@ def listen():
         if not(msg=="Q"):
             print("\n[Bob]:" + msg)
     return
+
+def verifyIncoming(cskt):
+    receive = cskt.recv(1024)
+    name = receive.decode("utf-8")
+    print("\n[Bob]: " + name)  # Alice saying who they are
+
+    nonce = "0.845312"
+    msg = nonce
+    cskt.send(msg.encode("utf-8"))  # send nonce to Alice
+    print("sent nonce: " + nonce)
+
+    encrypted_nonce = ""
+    receive = cskt.recv(1024)
+    receive = receive.decode("utf-8")  # receive encrypted nonce
+    while receive != "END":
+        encrypted_nonce = encrypted_nonce + receive
+        receive = cskt.recv(1024)
+        receive = receive.decode("utf-8")  # receive encrypted nonce
+    print("Received encrypted nonce: " + encrypted_nonce)
+
+    msg = "Send your public key"
+    cskt.send(msg.encode("utf-8"))
+    print("Message sent: " + msg)
+
+    receive = cskt.recv(1024)
+    bob_public = receive.decode("utf-8")  # receive Alice key modulus
+    print("Public key received: " + bob_public)
+    receive = cskt.recv(1024)
+    bob_modulus = receive.decode("utf-8")  # receive Alice key modulus
+    print("Public modulus received: " + bob_modulus)
+
+    bob_modulus = int(bob_modulus)
+    bob_public = int(bob_public)
+
+    decrypted_nonce = rsa.decrypt(encrypted_nonce, bob_public, bob_modulus)
+    print("Decrypted nonce: " + decrypted_nonce)
+
+    if decrypted_nonce == nonce:
+        print("Bob Confirmed")
+
+    return name, bob_public  # Return Alice public key to encrypt with
 
 def connect():
     while True:
@@ -39,9 +83,9 @@ def connect():
             time.sleep(5)
 
     msg = ""
-#    while not msg == "Q":
-#        msg = send(sendSocket)
-#        time.sleep(1)
+    while not msg == "Q":
+        msg = send(sendSocket)
+        time.sleep(1)
     return
 
 
@@ -52,7 +96,7 @@ def verify_outgoing(sskt):
         privateKey = key_pair["private"]
         keyModulus = key_pair["modulus"]
 
-        msg = "I am Alice"
+        msg = "Alice"
         sskt.send(msg.encode("utf-8"))
 
         receive = sskt.recv(1024)
@@ -94,8 +138,8 @@ def send(skt):
     return msg
 
 def main():
-#    listenThread = threading.Thread(target=listen)
-#    listenThread.start()
+    listenThread = threading.Thread(target=listen)
+    listenThread.start()
     connectThread = threading.Thread(target=connect)
     connectThread.start()
 

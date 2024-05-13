@@ -30,8 +30,8 @@ def listen():  # Incoming messages
 
 def verifyIncoming(cskt):
     receive = cskt.recv(1024)
-    receive = receive.decode("utf-8")
-    print("\n[Alice]: " + receive)  # Alice saying who they are
+    name = receive.decode("utf-8")
+    print("\n[Alice]: " + name)  # Alice saying who they are
 
     nonce = "0.845312"
     msg = nonce
@@ -67,7 +67,7 @@ def verifyIncoming(cskt):
     if decrypted_nonce == nonce:
         print("Alice Confirmed")
 
-    return alice_public, alice_modulus  # Return Alice public key to encrypt with
+    return name, alice_public  # Return Alice public key to encrypt with
 
 
 def connect():
@@ -79,7 +79,8 @@ def connect():
             # establish connection with server
             sendSocket.connect((serverIP, serverPort))
             print("Connected")
-            assymetricKeyGeneration()
+            verify_outgoing(sendSocket)  # Send public key to receiver
+            print("finished being verified")
             break
         except:
             print("No one to connect to")
@@ -90,7 +91,50 @@ def connect():
         msg = send(sendSocket)
         time.sleep(1)
     return
-            
+
+
+def verify_outgoing(sskt):
+    try:
+        key_pair = rsa.generate_key_pair(1024)
+        publicKey = key_pair["public"]
+        privateKey = key_pair["private"]
+        keyModulus = key_pair["modulus"]
+
+        msg = "Bob"
+        sskt.send(msg.encode("utf-8"))
+
+        receive = sskt.recv(1024)
+        nonce = receive.decode("utf-8")  # receive nonce
+        print("Received nonce: " + nonce)
+
+        encrypted_nonce = rsa.encrypt(nonce, privateKey, keyModulus)  # Encrypt with private key
+        msg = encrypted_nonce
+        sskt.send(msg.encode("utf-8"))  # send encrypted nonce
+        print("Sent nonce: " + msg)
+        time.sleep(2)
+        msg = "END"
+        sskt.send(msg.encode("utf-8"))  # specify end of encrypted nonce
+
+        receive = sskt.recv(1024)
+        receive = receive.decode("utf-8")  # receive request
+        print("Received message: " + receive)
+
+        publicKey = str(publicKey)  # Only strings can be encoded
+        keyModulus = str(keyModulus)
+
+        msg = publicKey
+        sskt.send(msg.encode("utf-8"))  # send public key
+        print("Public key sent: " + msg)
+        time.sleep(2)  # So they are in two different messages
+        msg = keyModulus
+        sskt.send(msg.encode("utf-8"))  # send key modulus
+        print("Public modulus sent: " + msg)
+
+    except Exception as e:
+        print(e)
+
+    return
+
 
 def send(skt):
     msg = input("Send a message to Alice: ")
@@ -98,23 +142,11 @@ def send(skt):
     return msg
 
 
-def assymetricKeyGeneration():
-    key_pair = rsa.generate_key_pair(1024)
-    publicKey = key_pair["public"]
-    privateKey = key_pair["private"]
-    keyModulus = key_pair["modulus"]
-
-    cipher = rsa.encrypt("Hello World!", key_pair["private"], key_pair["modulus"])
-    print(cipher)
-    decrypted_message = rsa.decrypt(cipher, key_pair["public"], key_pair["modulus"])
-    print(decrypted_message)
-
-
 def main():
     listenThread = threading.Thread(target=listen)
     listenThread.start()
-#    connectThread = threading.Thread(target=connect)
-#    connectThread.start()
+    connectThread = threading.Thread(target=connect)
+    connectThread.start()
 
 
 main()
