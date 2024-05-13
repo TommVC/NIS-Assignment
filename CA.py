@@ -1,47 +1,58 @@
 import socket
+import threading
+import queue
+from rsa_python import rsa
+
+KEY_PAIR = rsa.generate_key_pair(1024)  # Generates public key immediately
+HOST = "127.0.0.1"
+PORT = 8003
+
+# Create a queue to store waiting clients
+client_queue = queue.Queue()
 
 
-def run_ca():
-    # create a socket object
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    server_ip = "127.0.0.1"
-    port = 8003
-
-    # bind the socket to a specific address and port
-    server.bind((server_ip, port))
-    # listen for incoming connections
-    server.listen(0)
-    print(f"Listening on {server_ip}:{port}")
-
-    # accept incoming connections
-    client_socket, client_address = server.accept()
-    print(f"Accepted connection from {client_address[0]}:{client_address[1]}")
-
-    # receive data from the client
+def handle_client(conn, addr):
+    print(f'Connected by {addr}')
     while True:
-        request = client_socket.recv(1024)
-        request = request.decode("utf-8")  # convert bytes to string
+        name = conn.recv(1024)
+        name = name.decode("utf-8")
+        print("recived name " + name)
 
-        # if we receive "close" from the client, then we break
-        # out of the loop and close the conneciton
-        if request.lower() == "close":
-            # send response to the client which acknowledges that the
-            # connection should be closed and break out of the loop
-            client_socket.send("closed".encode("utf-8"))
-            break
+        pk = conn.recv(1024)  # public key # public modulus
+        pk = pk.decode("utf-8")
+        print("recived pk " + pk)
 
-        print(f"Received: {request}")
+        pm = conn.recv(1024)  # public modulus
+        pm = pm.decode("utf-8")
+        print("recived modulus " + pm)
 
-        response = "accepted".encode("utf-8")  # convert string to bytes
-        # convert and send accept response to the client
-        client_socket.send(response)
+        response = "This public key belongs to " + name + "," + pk + "," + pm
+        conn.send(response.encode("utf-8"))
 
-    # close connection socket with the client
-    client_socket.close()
-    print("Connection to client closed")
-    # close server socket
-    server.close()
+        response = str(KEY_PAIR["public"]) + "," + str(KEY_PAIR["modulus"])
+        conn.send(response.encode("utf-8"))
 
+        break
+    conn.close()
+    print(f'Client {addr} closed connection')
+    # Signal the next client in line (if any)
+    client_queue.put(True)
 
-run_ca()
+def main():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((HOST, PORT))
+        s.listen()
+        print(f'Server listening on {HOST}:{PORT}')
+        while True:
+            # Accept a new client connection
+            conn, addr = s.accept()
+            # Check if there are waiting clients
+            if not client_queue.empty():
+                # Notify the waiting client that it can connect now
+                client_queue.get(timeout=1)  # Wait with timeout to avoid blocking
+            # Start a new thread to handle the client connection
+            client_thread = threading.Thread(target=handle_client, args=(conn, addr))
+            client_thread.start()
+
+if __name__ == '__main__':
+    main()

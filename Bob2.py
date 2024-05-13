@@ -4,6 +4,46 @@ import time
 from rsa_python import rsa
 
 CONNECTED = False
+VERIFIED = False  # Makes sure messages can only be sent to receiver once receiver is verified
+key_pair = rsa.generate_key_pair(1024)  # Generates public key immediately
+CERTIFICATE = ""
+CA_KEY = ""
+
+
+def sendPK():  # Connect to CA server and send name + pk
+    sendSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    serverIP = "127.0.0.1"  # replace with the server's IP address
+    serverPort = 8003  # replace with the server's port number
+    # establish connection with server
+    sendSocket.connect((serverIP, serverPort))
+    print("Connected")
+
+    # send public key and modulus
+    name = "Bob"
+    sendSocket.send(name.encode("utf-8"))
+    print("sent name")
+    time.sleep(2)
+    public_key = str(key_pair["public"])
+    sendSocket.send(public_key.encode("utf-8"))
+    print("sent public key")
+    time.sleep(2)
+    modulus_key = str(key_pair["modulus"])
+    sendSocket.send(modulus_key.encode("utf-8"))
+    print("send public modulus")
+
+    # receive back certificate
+    msg = sendSocket.recv(1024)
+    msg = msg.decode("utf-8")
+    global CERTIFICATE
+    CERTIFICATE = msg
+    print(CERTIFICATE)
+
+    # receive CA public key
+    msg = sendSocket.recv(1024)
+    msg = msg.decode("utf-8")
+    global CA_KEY
+    CA_KEY = msg
+    print(CA_KEY)
 
 
 def listen():  # Incoming messages
@@ -18,6 +58,8 @@ def listen():  # Incoming messages
     client_socket, client_address = listen_socket.accept()
     name, alice_key = verifyIncoming(client_socket)  # Verifies incoming connection (is Alice actually Alice)
 #    verifyCA(name, alice_key)
+    global VERIFIED
+    VERIFIED = True
     print("finished verification")
     msg = ""
     while not msg == "Q":
@@ -36,7 +78,7 @@ def verifyIncoming(cskt):
     nonce = "0.845312"
     msg = nonce
     cskt.send(msg.encode("utf-8"))  # send nonce to Alice
-    print("sent nonce: " + nonce)
+#    print("sent nonce: " + nonce)
 
     encrypted_nonce = ""
     receive = cskt.recv(1024)
@@ -45,24 +87,24 @@ def verifyIncoming(cskt):
         encrypted_nonce = encrypted_nonce + receive
         receive = cskt.recv(1024)
         receive = receive.decode("utf-8")  # receive encrypted nonce
-    print("Received encrypted nonce: " + encrypted_nonce)
+#    print("Received encrypted nonce: " + encrypted_nonce)
 
     msg = "Send your public key"
     cskt.send(msg.encode("utf-8"))
-    print("Message sent: " + msg)
+#    print("Message sent: " + msg)
 
     receive = cskt.recv(1024)
     alice_public = receive.decode("utf-8")  # receive Alice key modulus
-    print("Public key received: " + alice_public)
+#    print("Public key received: " + alice_public)
     receive = cskt.recv(1024)
     alice_modulus = receive.decode("utf-8")  # receive Alice key modulus
-    print("Public modulus received: " + alice_modulus)
+#    print("Public modulus received: " + alice_modulus)
 
     alice_modulus = int(alice_modulus)
     alice_public = int(alice_public)
 
     decrypted_nonce = rsa.decrypt(encrypted_nonce, alice_public, alice_modulus)
-    print("Decrypted nonce: " + decrypted_nonce)
+#    print("Decrypted nonce: " + decrypted_nonce)
 
     if decrypted_nonce == nonce:
         print("Alice Confirmed")
@@ -86,6 +128,9 @@ def connect():
             print("No one to connect to")
             time.sleep(5)
 
+    while not VERIFIED:
+        time.sleep(1)
+
     msg = ""
     while not msg == "Q":
         msg = send(sendSocket)
@@ -95,7 +140,6 @@ def connect():
 
 def verify_outgoing(sskt):
     try:
-        key_pair = rsa.generate_key_pair(1024)
         publicKey = key_pair["public"]
         privateKey = key_pair["private"]
         keyModulus = key_pair["modulus"]
@@ -105,30 +149,30 @@ def verify_outgoing(sskt):
 
         receive = sskt.recv(1024)
         nonce = receive.decode("utf-8")  # receive nonce
-        print("Received nonce: " + nonce)
+#        print("Received nonce: " + nonce)
 
         encrypted_nonce = rsa.encrypt(nonce, privateKey, keyModulus)  # Encrypt with private key
         msg = encrypted_nonce
         sskt.send(msg.encode("utf-8"))  # send encrypted nonce
-        print("Sent nonce: " + msg)
+#        print("Sent nonce: " + msg)
         time.sleep(2)
         msg = "END"
         sskt.send(msg.encode("utf-8"))  # specify end of encrypted nonce
 
         receive = sskt.recv(1024)
         receive = receive.decode("utf-8")  # receive request
-        print("Received message: " + receive)
+#        print("Received message: " + receive)
 
         publicKey = str(publicKey)  # Only strings can be encoded
         keyModulus = str(keyModulus)
 
         msg = publicKey
         sskt.send(msg.encode("utf-8"))  # send public key
-        print("Public key sent: " + msg)
+#        print("Public key sent: " + msg)
         time.sleep(2)  # So they are in two different messages
         msg = keyModulus
         sskt.send(msg.encode("utf-8"))  # send key modulus
-        print("Public modulus sent: " + msg)
+#        print("Public modulus sent: " + msg)
 
     except Exception as e:
         print(e)
@@ -143,6 +187,7 @@ def send(skt):
 
 
 def main():
+    sendPK()
     listenThread = threading.Thread(target=listen)
     listenThread.start()
     connectThread = threading.Thread(target=connect)
