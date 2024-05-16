@@ -1,8 +1,12 @@
 import socket
+import os
 import threading
 import time
 import random
 from rsa_python import rsa
+from DiffieHellman import *
+import AES
+import Hashing as hash
 
 CONNECTED = False
 VERIFIED = False  # Makes sure messages can only be sent to receiver once receiver is verified
@@ -13,6 +17,8 @@ CA_MODULUS = ""
 PEER_KEY = ""
 PEER_MODULUS = ""
 
+diffieHellman = DiffieHellman()
+#print("PrivInt:", diffieHellman.privNum)
 
 def sendPK():  # Connect to CA server and send name + pk
     sendSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -78,13 +84,48 @@ def listen():  # Incoming messages
     global VERIFIED
     VERIFIED = True
     print("finished verification")
+
+    #obtaining shared secret key
+    secNum = eval(client_socket.recv(1024).decode("utf-8"))
+    #print("SecNum:" + str(secNum))
+    diffieHellman.generateSecretKey(secNum)
+    sharedKey = diffieHellman.getSecretKey()
+    #print("SK:" + str(sharedKey))
+    print("Shared Key generated")
+
     msg = ""
     while not msg == "Q":
-        msg = client_socket.recv(1024)
-        msg = msg.decode("utf-8")
-        if not(msg=="Q"):
-            print("\n[Alice]:" + msg)
+        receive(client_socket, sharedKey)
     return
+
+def receive(skt, sharedKey):
+    fileCaption = skt.recv(1024).decode("utf-8")
+    fileCaption = AES.decrypt(fileCaption, str(sharedKey)).decode("utf-8")
+    fileCaption, checksm = fileCaption.split("|")
+    checksm = checksm[:len(hash.getCheckSum(fileCaption))]
+    if not(checksm == hash.getCheckSum(fileCaption)):
+            print("Message Altered or Corrupted")
+    elif fileCaption=="Q":
+            return
+    ifsize, fsize, fileCaption, fileChecksm = fileCaption.split("<>")
+    fsize = int(fsize)
+    print("\nCaption:" + fileCaption)
+    outfile = open("./output/output.png", "wb")
+    data = skt.recv(1024)
+    f = data
+    fsize-=1024
+    while fsize > 1024:
+        data = skt.recv(1024)
+        f+=data
+        fsize-=1024
+    data = skt.recv(fsize)
+    f+=data
+    f = AES.decrypt(f, str(sharedKey))
+    f = f[:int(ifsize)]
+    if not(fileChecksm == hash.getCheckSum(f)):
+        print("File altered or corrupted")
+    else:
+        outfile.write(f)
 
 
 def verifyIncoming(cskt):
@@ -143,6 +184,7 @@ def verifyIncoming(cskt):
 
 
 def connect():
+    triedConnection = False
     while True:
         try:
             sendSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -155,18 +197,43 @@ def connect():
             print("finished being verified")
             break
         except:
-            print("No one to connect to")
-            time.sleep(1)
+            if not triedConnection:
+                print("No one to connect to")
+                triedConnection = True
+            time.sleep(2)
 
     while not VERIFIED:
         time.sleep(1)
 
+    #send secret integer for diffie hellman
+    secInt = diffieHellman.getSecretInteger()
+    #print("SecInt:" + str(secInt))
+    sendSocket.send(str(secInt).encode("utf-8"))
+
     msg = ""
     while not msg == "Q":
-        msg = send(sendSocket)
+        msg = sendMessage(sendSocket)
         time.sleep(1)
     return
-
+            
+def sendMessage(skt):
+    sharedKey = diffieHellman.getSecretKey()
+    msg=""
+    if sharedKey:
+        fileName = input("Enter file name of image you want to send: ")
+        file = open(fileName, "rb")
+        fileData = file.read()
+        ifsize = len(fileData)
+        checksum = hash.getCheckSum(fileData)
+        fileData = AES.encrypt(fileData, str(sharedKey))
+        fsize = len(fileData)
+        fileCaption = input("Enter the file caption: ")
+        fileCaption = str(ifsize)+"<>"+str(fsize) + "<>" + fileCaption + "<>" + checksum
+        print(fileCaption +" " +hash.getCheckSum(fileCaption))
+        fileCaption = AES.encrypt(hash.addHash(fileCaption), str(sharedKey))
+        skt.send(fileCaption)
+        skt.sendall(fileData)
+    return msg
 
 def verify_outgoing(sskt):
     try:
@@ -202,12 +269,6 @@ def verify_outgoing(sskt):
         print(e)
 
     return
-
-
-def send(skt):
-    msg = input("Send a message to Alice: ")
-    skt.send(msg.encode("utf-8"))
-    return msg
 
 
 def main():
