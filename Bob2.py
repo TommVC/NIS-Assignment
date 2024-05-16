@@ -86,7 +86,8 @@ def listen():  # Incoming messages
     print("finished verification")
 
     #obtaining shared secret key
-    secNum = eval(client_socket.recv(1024).decode("utf-8"))
+    secNum = client_socket.recv(1024).decode("utf-8")
+    secNum = eval(rsa.decrypt(secNum, PEER_KEY, PEER_MODULUS))
     #print("SecNum:" + str(secNum))
     diffieHellman.generateSecretKey(secNum)
     sharedKey = diffieHellman.getSecretKey()
@@ -110,7 +111,7 @@ def receive(skt, sharedKey):
     ifsize, fsize, fileCaption, fileChecksm = fileCaption.split("<>")
     fsize = int(fsize)
     print("\nCaption:" + fileCaption)
-    outfile = open("./output/output.png", "wb")
+    outfile = open("output/output.png", "wb")
     data = skt.recv(1024)
     f = data
     fsize-=1024
@@ -207,8 +208,9 @@ def connect():
 
     #send secret integer for diffie hellman
     secInt = diffieHellman.getSecretInteger()
+    secInt = rsa.encrypt(str(secInt), key_pair["private"], key_pair["modulus"])
     #print("SecInt:" + str(secInt))
-    sendSocket.send(str(secInt).encode("utf-8"))
+    sendSocket.send(secInt.encode("utf-8"))
 
     msg = ""
     while not msg == "Q":

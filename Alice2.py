@@ -17,7 +17,9 @@ PEER_KEY = ""
 PEER_MODULUS = ""
 
 diffieHellman = DiffieHellman()
-#print("PrivInt:", diffieHellman.privNum)
+# print("PrivInt:", diffieHellman.privNum)
+
+
 def sendPK():  # Connect to CA server and send name + pk
     sendSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     serverIP = "127.0.0.1"  # replace with the server's IP address
@@ -85,7 +87,8 @@ def listen():
 #    print("finished verification")
 
     #obtaining shared secret key
-    secNum = eval(client_socket.recv(1024).decode("utf-8"))
+    secNum = client_socket.recv(1024).decode("utf-8")
+    secNum = eval(rsa.decrypt(secNum, PEER_KEY, PEER_MODULUS))
     #print("SecNum:" + str(secNum))
     diffieHellman.generateSecretKey(secNum)
     sharedKey = diffieHellman.getSecretKey()
@@ -213,8 +216,9 @@ def connect():
 
     #send secret integer for diffie hellman
     secInt = diffieHellman.getSecretInteger()
+    secInt = rsa.encrypt(str(secInt), key_pair["private"], key_pair["modulus"])
     #print("SecInt:" + str(secInt))
-    sendSocket.send(str(secInt).encode("utf-8"))
+    sendSocket.send(secInt.encode("utf-8"))
 
     while not VERIFIED:
         time.sleep(0.5)
@@ -249,7 +253,6 @@ def sendMessage(skt):
 
 def verify_outgoing(sskt):
     try:
-        publicKey = key_pair["public"]
         privateKey = key_pair["private"]
         keyModulus = key_pair["modulus"]
 
