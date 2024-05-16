@@ -1,6 +1,7 @@
 import socket
 import threading
 import time
+import random
 from rsa_python import rsa
 
 CONNECTED = False
@@ -9,6 +10,8 @@ key_pair = rsa.generate_key_pair(1024)  # Generates public key immediately
 CERTIFICATE = ""
 CA_KEY = ""
 CA_MODULUS = ""
+PEER_KEY = ""
+PEER_MODULUS = ""
 
 
 def sendPK():  # Connect to CA server and send name + pk
@@ -17,17 +20,17 @@ def sendPK():  # Connect to CA server and send name + pk
     serverPort = 8003  # replace with the server's port number
     # establish connection with server
     sendSocket.connect((serverIP, serverPort))
-    print("Connected")
+    print("Connected to CA\nReceiving certificate...")
 
     # send public key and modulus
     name = "Alice"
     sendSocket.send(name.encode("utf-8"))
 #    print("sent name")
-    time.sleep(2)
+    time.sleep(0.5)
     public_key = str(key_pair["public"])
     sendSocket.send(public_key.encode("utf-8"))
 #    print("sent public key")
-    time.sleep(2)
+    time.sleep(0.5)
     modulus_key = str(key_pair["modulus"])
     sendSocket.send(modulus_key.encode("utf-8"))
 #    print("sent public modulus")
@@ -51,17 +54,11 @@ def sendPK():  # Connect to CA server and send name + pk
     global CA_KEY
     CA_KEY = msg[0]
     CA_KEY = int(CA_KEY)
-    #    print(CA_KEY)
+#    print(CA_KEY)
     global CA_MODULUS
     CA_MODULUS = msg[1]
     CA_MODULUS = int(CA_MODULUS)
 #    print(CA_MODULUS)
-
-#    CA_KEY = int(CA_KEY)
-#    CA_MODULUS = int(CA_MODULUS)
-
-#    CERTIFICATE = rsa.decrypt(CERTIFICATE, CA_KEY, CA_MODULUS)
-#    print("Decrypted certificate: " + CERTIFICATE)
 
 
 def listen():
@@ -74,10 +71,14 @@ def listen():
     listen_socket.listen(0)
     print(f"Listening on {ip}:{port}")
     client_socket, client_address = listen_socket.accept()
-    name, bob_key = verifyIncoming(client_socket)  # Verifies incoming connection (is Alice actually Alice)
+    bob_key, bob_modulus = verifyIncoming(client_socket)  # Verifies incoming connection (is Bob actually Bob)
+    global PEER_KEY
+    PEER_KEY = bob_key
+    global PEER_MODULUS
+    PEER_MODULUS = bob_modulus
     global VERIFIED
     VERIFIED = True
-    print("finished verification")
+#    print("finished verification")
     msg = ""
     while not msg == "Q":
         msg = client_socket.recv(1024)
@@ -90,9 +91,9 @@ def listen():
 def verifyIncoming(cskt):
     receive = cskt.recv(1024)
     name = receive.decode("utf-8")
-    print("\n[Bob]: " + name)  # Alice saying who they are
+#    print("\n[Bob]: " + name)  # Alice saying who they are
 
-    nonce = "0.845312"
+    nonce = str(random.uniform(0, 1))
     msg = nonce
     cskt.send(msg.encode("utf-8"))  # send nonce to Alice
 #    print("sent nonce: " + nonce)
@@ -110,29 +111,36 @@ def verifyIncoming(cskt):
     cskt.send(msg.encode("utf-8"))
 #    print("Message sent: " + msg)
 
-#    receive = cskt.recv(1024)
-#    clientCert = receive.decode("utf-8")
+    clientCert = ""
+    receive = cskt.recv(1024)
+    receive = receive.decode("utf-8")
+    while receive != "END":
+        clientCert = clientCert + receive
+        receive = cskt.recv(1024)
+        receive = receive.decode("utf-8")  # receive encrypted nonce
 
-#    clientCert = rsa.decrypt(clientCert, CA_KEY, CA_MODULUS)  # decrypt cert
+    clientCert = rsa.decrypt(clientCert, CA_KEY, CA_MODULUS)  # decrypt cert
 #    print(clientCert)
 
-    receive = cskt.recv(1024)
-    bob_public = receive.decode("utf-8")  # receive Alice key modulus
-    print("Public key received: " + bob_public)
-    receive = cskt.recv(1024)
-    bob_modulus = receive.decode("utf-8")  # receive Alice key modulus
-    print("Public modulus received: " + bob_modulus)
+    clientCert = clientCert.split('#')
+    cert_name = clientCert[0]
+    bob_key = clientCert[1]
+    bob_modulus = clientCert[2]
 
-    bob_modulus = int(bob_modulus)
-    bob_public = int(bob_public)
+    if cert_name == name:
+        print("Bob name confirmed")
+        bob_modulus = int(bob_modulus)
+        bob_key = int(bob_key)
+        decrypted_nonce = rsa.decrypt(encrypted_nonce, bob_key, bob_modulus)
+        print("Decrypted nonce: " + decrypted_nonce)
+        if decrypted_nonce == nonce:
+            print("Bob identity confirmed")
+        else:
+            print("Security breach")
+    else:
+        print("security breach")
 
-    decrypted_nonce = rsa.decrypt(encrypted_nonce, bob_public, bob_modulus)
-    print("Decrypted nonce: " + decrypted_nonce)
-
-    if decrypted_nonce == nonce:
-        print("Bob Confirmed")
-
-    return name, bob_public  # Return Alice public key to encrypt with
+    return bob_key, bob_modulus
 
 
 def connect():
@@ -149,10 +157,10 @@ def connect():
             break
         except:
             print("No one to connect to")
-            time.sleep(5)
+            time.sleep(1)
 
     while not VERIFIED:
-        time.sleep(1)
+        time.sleep(0.5)
 
     msg = ""
     while not msg == "Q":
@@ -178,7 +186,7 @@ def verify_outgoing(sskt):
         msg = encrypted_nonce
         sskt.send(msg.encode("utf-8"))  # send encrypted nonce
 #        print("Sent nonce: " + msg)
-        time.sleep(2)
+        time.sleep(0.5)
         msg = "END"
         sskt.send(msg.encode("utf-8"))  # specify end of encrypted nonce
 
@@ -186,19 +194,10 @@ def verify_outgoing(sskt):
         receive = receive.decode("utf-8")  # receive request
 #        print("Received message: " + receive)
 
-#        msg = CERTIFICATE
-#        sskt.send(msg.encode("utf-8"))  # Send certificate
-
-        publicKey = str(publicKey)  # Only strings can be encoded
-        keyModulus = str(keyModulus)
-
-        msg = publicKey
-        sskt.send(msg.encode("utf-8"))  # send public key
-        print("Public key sent: " + msg)
-        time.sleep(2)  # So they are in two different messages
-        msg = keyModulus
-        sskt.send(msg.encode("utf-8"))  # send key modulus
-        print("Public modulus sent: " + msg)
+        msg = CERTIFICATE
+        sskt.send(msg.encode("utf-8"))  # Send certificate
+        time.sleep(0.5)
+        sskt.send("END".encode("utf-8"))
 
     except Exception as e:
         print(e)
@@ -213,7 +212,7 @@ def send(skt):
 
 
 def main():
-#    sendPK()
+    sendPK()
     listenThread = threading.Thread(target=listen)
     listenThread.start()
     connectThread = threading.Thread(target=connect)

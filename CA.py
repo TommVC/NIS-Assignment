@@ -31,7 +31,7 @@ def handle_client(conn, addr):
         response = name + "#" + pk + "#" + pm
         encrypted_respone = rsa.encrypt(response, KEY_PAIR["private"], KEY_PAIR["modulus"])
         conn.send(encrypted_respone.encode("utf-8"))
-        time.sleep(1)
+        time.sleep(0.5)
         response = "END"
         conn.send(response.encode("utf-8"))
 
@@ -55,7 +55,7 @@ def main():
             # Check if there are waiting clients
             if not client_queue.empty():
                 # Notify the waiting client that it can connect now
-                client_queue.get(timeout=5)  # Wait with timeout to avoid blocking
+                client_queue.get(timeout=1)  # Wait with timeout to avoid blocking
             # Start a new thread to handle the client connection
             client_thread = threading.Thread(target=handle_client, args=(conn, addr))
             client_thread.start()
