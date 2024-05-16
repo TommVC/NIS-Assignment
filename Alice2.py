@@ -1,8 +1,10 @@
 import socket
+import os
 import threading
 import time
 from DiffieHellman import *
 import AES
+import Hashing as hash
 
 diffieHellman = DiffieHellman()
 #print("PrivInt:", diffieHellman.privNum)
@@ -27,12 +29,47 @@ def listen():
 
     msg = ""
     while not msg == "Q":
-        msg = client_socket.recv(1024)
-        msg = msg.decode("utf-8")
-        msg = AES.decrypt(msg, str(sharedKey))
-        if not(msg=="Q"):
-            print("\n[Bob]:" + msg.decode("utf-8"))
+        receive(client_socket, sharedKey)
     return
+
+def receive(skt, sharedKey):
+    #receive file header data and decrypt
+    fileHeader = skt.recv(1024).decode("utf-8")
+    fileHeader = AES.decrypt(fileHeader, str(sharedKey)).decode("utf-8")
+    fileCaption, checksm = fileHeader.split("|")
+    checksm = checksm[:len(hash.getCheckSum(fileCaption))] #unpad checksum
+    #check hash
+    if not(checksm == hash.getCheckSum(fileCaption)):
+            print("Message Altered or Corrupted")
+    elif fileCaption=="Q":
+            return
+    
+    #split header data 
+    ifsize, fsize, fileCaption, fileChecksm = fileCaption.split("<>")
+    imageFileName = fileCaption.replace(" ", "_") + "Alice"
+    fsize = int(fsize)
+    print("\nCaption:" + fileCaption)
+    outfile = open("./output/" +imageFileName+".png", "wb")
+
+    #receive encrypted file data 
+    data = skt.recv(1024)
+    f = data
+    fsize-=1024
+    while fsize > 1024:
+        data = skt.recv(1024)
+        f+=data
+        fsize-=1024
+    data = skt.recv(fsize)
+    f+=data
+    #decrypt and unpad file data 
+    f = AES.decrypt(f, str(sharedKey))
+    f = f[:int(ifsize)]
+    #check hash for file, if all good write bytes to output file
+    if not(fileChecksm == hash.getCheckSum(f)):
+        print("File altered or corrupted")
+    else:
+        outfile.write(f)
+    
 
 def connect():
     triedConnection = False
@@ -62,15 +99,25 @@ def connect():
         time.sleep(1)
     return
             
-
 def sendMessage(skt):
     sharedKey = diffieHellman.getSecretKey()
     msg=""
     if sharedKey:
-        msg = input("Send a message to Bob: ")
-        msg = AES.encrypt(msg, str(sharedKey))
-        print("Encrypted Message: " + str(msg))
-        skt.send(msg)
+        #open file for image wanting to be sent
+        fileName = input("Enter file name of image you want to send: ")
+        file = open(fileName, "rb")
+        fileData = file.read()  
+        ifsize = len(fileData) #initial file size before encryption, needed to unpad file after encryption
+        #hash file and encrypt file data
+        checksum = hash.getCheckSum(fileData)
+        fileData = AES.encrypt(fileData, str(sharedKey))
+        fsize = len(fileData) #length of encrypted file data, used for the receiver to know how much data they will receive
+        #get file caption and send header data
+        fileCaption = input("Enter the file caption: ")
+        fileCaption = str(ifsize)+"<>"+str(fsize) + "<>" + fileCaption + "<>" + checksum
+        fileCaption = AES.encrypt(hash.addHash(fileCaption), str(sharedKey)) #add checksum for header data and encrypt
+        skt.send(fileCaption)
+        skt.sendall(fileData)
     return msg
 
 def main():

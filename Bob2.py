@@ -1,8 +1,10 @@
 import socket
+import os
 import threading
 import time
 from DiffieHellman import *
 import AES
+import Hashing as hash
 
 diffieHellman = DiffieHellman()
 #print("PrivInt:", diffieHellman.privNum)
@@ -27,12 +29,37 @@ def listen():
 
     msg = ""
     while not msg == "Q":
-        msg = client_socket.recv(1024)
-        msg = msg.decode("utf-8")
-        msg = AES.decrypt(msg, str(sharedKey))
-        if not(msg=="Q"):
-            print("\n[Alice]:" + msg.decode("utf-8"))
+        receive(client_socket, sharedKey)
     return
+
+def receive(skt, sharedKey):
+    fileCaption = skt.recv(1024).decode("utf-8")
+    fileCaption = AES.decrypt(fileCaption, str(sharedKey)).decode("utf-8")
+    fileCaption, checksm = fileCaption.split("|")
+    checksm = checksm[:len(hash.getCheckSum(fileCaption))]
+    if not(checksm == hash.getCheckSum(fileCaption)):
+            print("Message Altered or Corrupted")
+    elif fileCaption=="Q":
+            return
+    ifsize, fsize, fileCaption, fileChecksm = fileCaption.split("<>")
+    fsize = int(fsize)
+    print("\nCaption:" + fileCaption)
+    outfile = open("./output/output.png", "wb")
+    data = skt.recv(1024)
+    f = data
+    fsize-=1024
+    while fsize > 1024:
+        data = skt.recv(1024)
+        f+=data
+        fsize-=1024
+    data = skt.recv(fsize)
+    f+=data
+    f = AES.decrypt(f, str(sharedKey))
+    f = f[:int(ifsize)]
+    if not(fileChecksm == hash.getCheckSum(f)):
+        print("File altered or corrupted")
+    else:
+        outfile.write(f)
 
 def connect():
     triedConnection = False
@@ -62,15 +89,23 @@ def connect():
         time.sleep(1)
     return
             
-
 def sendMessage(skt):
     sharedKey = diffieHellman.getSecretKey()
     msg=""
     if sharedKey:
-        msg = input("Send a message to Alice: ")
-        msg = AES.encrypt(msg, str(sharedKey))
-        print("Encrypted Message: " + str(msg))
-        skt.send(msg)
+        fileName = input("Enter file name of image you want to send: ")
+        file = open(fileName, "rb")
+        fileData = file.read()
+        ifsize = len(fileData)
+        checksum = hash.getCheckSum(fileData)
+        fileData = AES.encrypt(fileData, str(sharedKey))
+        fsize = len(fileData)
+        fileCaption = input("Enter the file caption: ")
+        fileCaption = str(ifsize)+"<>"+str(fsize) + "<>" + fileCaption + "<>" + checksum
+        print(fileCaption +" " +hash.getCheckSum(fileCaption))
+        fileCaption = AES.encrypt(hash.addHash(fileCaption), str(sharedKey))
+        skt.send(fileCaption)
+        skt.sendall(fileData)
     return msg
 
 def main():
