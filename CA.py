@@ -3,9 +3,6 @@ import threading
 import queue
 import time
 import Hashing as hash
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives.asymmetric import padding
 from Cryptodome.PublicKey import RSA
 from Cryptodome.Signature import pss
 from Cryptodome.Hash import SHA256
@@ -30,18 +27,19 @@ def handle_client(conn, addr):
         pk = conn.recv(1024)  # public key
         print("received pk " + str(pk))
 
-        response = name + "#" + str(pk)
+
+        response = name + "#" + pk.decode("utf-8")
         response = response.encode('utf-8')
         print(response)
-
+        
         h = SHA256.new(response)
         signature = pss.new(privateKey).sign(h)
+
 
         conn.send(response)
         print("Sent message: " + str(response))
         time.sleep(1)
         conn.send(signature)
-        print("Sent signature: " + str(signature))
         time.sleep(1)
 
         response = privateKey.public_key().exportKey()
