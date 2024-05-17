@@ -15,7 +15,7 @@ from Cryptodome.Hash import SHA256
 CONNECTED = False
 VERIFIED = False  # Makes sure messages can only be sent to receiver once receiver is verified
 PEER_KEY = b""
-TESTFILE = open("./testing/ALICETEST.txt", "w")
+TESTFILE = open("./testing/BOBTEST.txt", "w")
 diffieHellman = DiffieHellman()
 cert = certificate()
 
@@ -30,7 +30,7 @@ def sendPK():  # Connect to CA server and send name + pk
     sendSocket.connect((serverIP, serverPort))
 
     # send public key and modulus
-    name = "Alice"
+    name = "Bob"
     sendSocket.send(name.encode("utf-8"))
     time.sleep(1)
 
@@ -55,7 +55,7 @@ def sendPK():  # Connect to CA server and send name + pk
 def listen():
     listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     ip = "127.0.0.1"
-    port = 8002
+    port = 8001
     # bind the socket to a specific address and port
     listen_socket.bind((ip, port))
     # listen for incoming connections 
@@ -109,7 +109,7 @@ def receive(skt, sharedKey):
 
     #split header data
     ifsize, fsize, fileCaption, fileChecksm = fileCaption.split("<>")
-    imageFileName = fileCaption.replace(" ", "_") + "Alice"
+    imageFileName = fileCaption.replace(" ", "_") + "Bob"
     fsize = int(fsize)
     print("\nCaption:" + fileCaption)
     outfile = open("./output/" +imageFileName+".png", "wb")
@@ -168,7 +168,7 @@ def connect():
         try:
             sendSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             serverIP = "127.0.0.1"  # replace with the server's IP address
-            serverPort = 8001  # replace with the server's port number
+            serverPort = 8002  # replace with the server's port number
             # establish connection with server
             sendSocket.connect((serverIP, serverPort))
             print("Connected")
@@ -206,9 +206,16 @@ def sendMessage(skt):
     msg=""
     if sharedKey:
         #open file for image wanting to be sent
-        fileName = input("Enter file name of image you want to send (Q TO EXIT): ")
+        fileFound = False
+        fileName = ""
+        while (not fileFound) and not(fileName == "Q"):
+            fileName = input("Enter file name of image you want to send (Q TO EXIT): ")
+            try:
+                file = open(fileName, "rb")
+                fileFound = True
+            except:
+                print("No such file")
         if not fileName == "Q":
-            file = open(fileName, "rb")
             fileData = file.read()
             TESTFILE.write("\nSENT FILE DATA: " + str(fileData) + "\n")
             ifsize = len(fileData) #initial file size before encryption, needed to unpad file after encryption
@@ -234,7 +241,7 @@ def sendMessage(skt):
 def verify_outgoing(sskt):
     msg = cert.getCertificate()
     signature = cert.getSignature()
-    TESTFILE.write("\nSENT CERTIFICATE TO BOB: " + str(msg) + "\n" + str(signature) + "\n")
+    TESTFILE.write("\nSENT CERTIFICATE TO ALICE: " + str(msg) + "\n" + str(signature) + "\n")
     sskt.send(msg)  # Send certificate
     time.sleep(1)
     sskt.send(signature)

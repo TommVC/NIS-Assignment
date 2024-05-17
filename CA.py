@@ -1,3 +1,5 @@
+#certificate authority class
+
 import socket
 import threading
 import queue

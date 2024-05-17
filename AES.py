@@ -1,3 +1,5 @@
+#this class implements AES encryption and decryption
+
 import base64
 import hashlib
 from Cryptodome.Cipher import AES

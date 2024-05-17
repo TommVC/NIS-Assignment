@@ -1,3 +1,5 @@
+#this class just stores all the certificate data for a client
+
 class certificate:
 
     def __init__(self):
