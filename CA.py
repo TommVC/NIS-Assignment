@@ -13,7 +13,6 @@ PORT = 8003
 # Create a queue to store waiting clients
 client_queue = queue.Queue()
 
-
 privateKey = RSA.generate(3072)
 
 
@@ -22,29 +21,27 @@ def handle_client(conn, addr):
     while True:
         name = conn.recv(1024)
         name = name.decode("utf-8")
-        print("received name " + name)
 
         pk = conn.recv(1024)  # public key
-        print("received pk " + str(pk))
+        print("\nRECEIVED NAME + PK:" + name + " " + str(pk) + "\n")
 
 
         response = name + "#" + pk.decode("utf-8")
         response = response.encode('utf-8')
-        print(response)
         
         h = SHA256.new(response)
         signature = pss.new(privateKey).sign(h)
 
 
         conn.send(response)
-        print("Sent message: " + str(response))
         time.sleep(1)
         conn.send(signature)
         time.sleep(1)
+        print("\nSENT CERTIFICATE AND SIGNATURE: " + str(response) + "\n" + str(signature) + "\n")
 
         response = privateKey.public_key().exportKey()
         conn.send(response)
-        print("Sent key: " + str(response))
+        print("\nSENT CA: " + str(response) + "\n")
 
         break
     conn.close()

@@ -156,29 +156,30 @@ def receive(skt, sharedKey):
 
 def verifyIncoming(cskt):
     receivePeer = cskt.recv(1024)
+#    receivePeer = b"SOME#ONE GOT IN!!!"
     h = SHA256.new(receivePeer)
     caKey = cert.getCAKey()
-    print("CA KEY", caKey)
     verifier = pss.new(caKey)
     receivePeer = receivePeer.decode("utf-8")
-    print("Receive peer: " + receivePeer)
 
     name, peerKey = receivePeer.split("#")
 
     signature = cskt.recv(1024)
 
-
-    try:
-        verifier.verify(h, signature)
-        print("The signature OF PK is authentic.")
-    except ValueError:
-        print("The signature OF PK is not authentic.")
+    TESTFILE.write("\nRECEIVED CERTIFICATE: " + str(receivePeer) + "\n" + str(signature) + "\n")
 
     global PEER_KEY
-    print("Key attempt: ")
-    print(peerKey.encode("utf-8"))
-    PEER_KEY = RSA.import_key(peerKey.encode("utf-8"))
-    print("Peer Key: " + str(PEER_KEY))
+    try:
+        verifier.verify(h, signature)
+
+        PEER_KEY = RSA.import_key(peerKey.encode("utf-8"))
+        TESTFILE.write("\nPEER PUBLIC KEY: " + str(PEER_KEY) + "\n")
+        print("The signature OF PK is authentic.")
+        TESTFILE.write("\nVALIDATE PK AUTHENTICITY: PK IS AUTHENTIC" + "\n")
+    except ValueError:
+        TESTFILE.write("\nVALIDATE PK AUTHENTICITY: PK IS NOT AUTHENTIC" + "\n")
+        PEER_KEY = None
+        print("The signature OF PK is not authentic.")
 
     return PEER_KEY
 
@@ -193,7 +194,6 @@ def connect():
             sendSocket.connect((serverIP, serverPort))
             print("Connected")
             verify_outgoing(sendSocket)  # Send public key to receiver
-            print("finished being verified")
             break
         except:
             if not triedConnection:
@@ -255,7 +255,6 @@ def sendMessage(skt):
 def verify_outgoing(sskt):
     msg = cert.getCertificate()
     signature = cert.getSignature()
-    print("Sending cert: " + msg.decode("utf-8"))
     sskt.send(msg)  # Send certificate
     time.sleep(1)
     sskt.send(signature)

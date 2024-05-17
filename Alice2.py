@@ -28,44 +28,28 @@ def sendPK():  # Connect to CA server and send name + pk
     serverPort = 8003  # replace with the server's port number
     # establish connection with server
     sendSocket.connect((serverIP, serverPort))
-    #print("Connected to CA\nReceiving certificate...")
 
     # send public key and modulus
     name = "Alice"
     sendSocket.send(name.encode("utf-8"))
-    #    print("sent name")
     time.sleep(1)
 
     publicKey = privateKey.public_key().export_key()
     sendSocket.send(publicKey)
-    #print("sent public key: " + str(publicKey))
+    TESTFILE.write("\nSENT NAME + PK: " + name + " " + str(publicKey) + "\n")
 
     # receive back certificate
     certif = sendSocket.recv(1024)
     cert.setCertificate(certif)
-    #print("Signed certificate: " + str(cert))
 
     signature = sendSocket.recv(1024)
     cert.setSignature(signature)
+    TESTFILE.write("\nRECEIVED CERTIFICATE AND SIGNATURE: " + str(certif) + "\n" + str(signature) + "\n")
 
     receiveCa = sendSocket.recv(1024)
-    #print("CA Key: " + str(receiveCa))
-    print(str(receiveCa))
     caKey = RSA.import_key(receiveCa)
-    
-    print("CAKEY", caKey)
     cert.setCAKey(caKey)
-    #print("CA Key: " + str(caKey))
-
-    # message = cert
-    #
-    # h = SHA256.new(message)
-    # verifier = pss.new(caKey)
-    # try:
-    #     verifier.verify(h, signature)
-    #     print("The signature is authentic.")
-    # except ValueError:
-    #     print("The signature is not authentic.")
+    TESTFILE.write("\nRECEIVED CA PK: " + str(caKey) + "\n")
 
 
 def listen():
@@ -93,13 +77,14 @@ def listen():
     try:
         verifier.verify(h, signature)
         print("The signature of SECNUM is authentic.")
+        TESTFILE.write("\nSIGNATURE OF SECNUM: AUTHENTIC" + "\n")
     except ValueError:
         print("The signature of SECNUM is not authentic.")
     secNum = eval(secNum.decode("utf-8"))
-    TESTFILE.write("\nRECEIVED SECNUM:" + str(secNum) + "\n")
+    TESTFILE.write("\nRECEIVED SECNUM: " + str(secNum) + "\n")
     diffieHellman.generateSecretKey(secNum)
     sharedKey = diffieHellman.getSecretKey()
-    TESTFILE.write("\nSHARED KEY:" + str(sharedKey) + "\n")
+    TESTFILE.write("\nSHARED KEY: " + str(sharedKey) + "\n")
 
     msg = ""
     while not msg == "Q":
@@ -111,9 +96,9 @@ def receive(skt, sharedKey):
     fileHeader = skt.recv(1024).decode("utf-8")
     if fileHeader == "Q":
         return "Q"
-    TESTFILE.write("\nRECEIVED HEADER ENCRYPTED:"+ fileHeader + "\n")
+    TESTFILE.write("\nRECEIVED HEADER ENCRYPTED: "+ fileHeader + "\n")
     fileHeader = AES.decrypt(fileHeader, str(sharedKey)).decode("utf-8")
-    TESTFILE.write("\nRECEIVED HEADER DECRYPTED:"+ fileHeader + "\n")
+    TESTFILE.write("\nRECEIVED HEADER DECRYPTED: "+ fileHeader + "\n")
     fileCaption, checksm = fileHeader.split("|")
     checksm = checksm[:len(hash.getCheckSum(fileCaption))] #unpad checksum
     #check hash
@@ -140,9 +125,9 @@ def receive(skt, sharedKey):
     data = skt.recv(fsize)
     f+=data
     #decrypt and unpad file data
-    TESTFILE.write("\nRECEIVED FILE DATA ENCRYPTED:" + str(f) + "\n")
+    TESTFILE.write("\nRECEIVED FILE DATA ENCRYPTED: " + str(f) + "\n")
     f = AES.decrypt(f, str(sharedKey))
-    TESTFILE.write("\nRECEIVED FILE DATA DECRYPTED:" + str(f) + "\n")
+    TESTFILE.write("\nRECEIVED FILE DATA DECRYPTED: " + str(f) + "\n")
     f = f[:int(ifsize)]
     #check hash for file, if all good write bytes to output file
     if not(fileChecksm == hash.getCheckSum(f)):
@@ -158,10 +143,8 @@ def verifyIncoming(cskt):
     receivePeer = cskt.recv(1024)
     h = SHA256.new(receivePeer)
     caKey = cert.getCAKey()
-    print("CA KEY", caKey)
     verifier = pss.new(caKey)
     receivePeer = receivePeer.decode("utf-8")
-    print("Receive peer: " + receivePeer)
 
     name, peerKey = receivePeer.split("#")
 
@@ -175,10 +158,7 @@ def verifyIncoming(cskt):
         print("The signature OF PK is not authentic.")
 
     global PEER_KEY
-    print("Key attempt: ")
-    print(peerKey.encode("utf-8"))
     PEER_KEY = RSA.import_key(peerKey.encode("utf-8"))
-    print("Peer Key: " + str(PEER_KEY))
 
     return PEER_KEY
 
@@ -193,7 +173,6 @@ def connect():
             sendSocket.connect((serverIP, serverPort))
             print("Connected")
             verify_outgoing(sendSocket)  # Send public key to receiver
-            print("finished being verified")
             break
         except:
             if not triedConnection:
@@ -231,19 +210,19 @@ def sendMessage(skt):
         if not fileName == "Q":
             file = open(fileName, "rb")
             fileData = file.read()
-            TESTFILE.write("\nSENT FILE DATA:" + str(fileData) + "\n")
+            TESTFILE.write("\nSENT FILE DATA: " + str(fileData) + "\n")
             ifsize = len(fileData) #initial file size before encryption, needed to unpad file after encryption
             #hash file and encrypt file data
             checksum = hash.getCheckSum(fileData)
             fileData = AES.encrypt(fileData, str(sharedKey))
-            TESTFILE.write("\nSENT FILE DATA ENCRYPTED:" + str(fileData) + "\n")
+            TESTFILE.write("\nSENT FILE DATA ENCRYPTED: " + str(fileData) + "\n")
             fsize = len(fileData) #length of encrypted file data, used for the receiver to know how much data they will receive
             #get file caption and send header data
             fileCaption = input("Enter the file caption: ")
             fileCaption = str(ifsize)+"<>"+str(fsize) + "<>" + fileCaption + "<>" + checksum
-            TESTFILE.write("\nSENT FILE HEADER:" + fileCaption + "\n")
+            TESTFILE.write("\nSENT FILE HEADER: " + fileCaption + "\n")
             fileCaption = AES.encrypt(hash.addHash(fileCaption), str(sharedKey)) #add checksum for header data and encrypt
-            TESTFILE.write("\nSENT FILE HEADER ENCRYPTED:" + str(fileCaption) + "\n")
+            TESTFILE.write("\nSENT FILE HEADER ENCRYPTED: " + str(fileCaption) + "\n")
             skt.send(fileCaption)
             skt.sendall(fileData)
         else:
@@ -255,7 +234,7 @@ def sendMessage(skt):
 def verify_outgoing(sskt):
     msg = cert.getCertificate()
     signature = cert.getSignature()
-    print("Sending cert: " + msg.decode("utf-8"))
+    TESTFILE.write("\nSENT CERTIFICATE TO BOB: " + str(msg) + "\n" + str(signature) + "\n")
     sskt.send(msg)  # Send certificate
     time.sleep(1)
     sskt.send(signature)
