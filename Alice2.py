@@ -1,23 +1,26 @@
 import socket
+import os
 import threading
 import time
 import random
-from rsa_python import rsa
 from DiffieHellman import *
+from certificate import *
 import AES
 import Hashing as hash
+from Cryptodome.PublicKey import RSA
+from Cryptodome.Signature import pss
+from Cryptodome.Hash import SHA256
+
 
 CONNECTED = False
 VERIFIED = False  # Makes sure messages can only be sent to receiver once receiver is verified
-key_pair = rsa.generate_key_pair(1024)  # Generates public key immediately
-CERTIFICATE = ""
 CA_KEY = ""
-CA_MODULUS = ""
-PEER_KEY = ""
-PEER_MODULUS = ""
+PEER_KEY = b""
 
 diffieHellman = DiffieHellman()
-# print("PrivInt:", diffieHellman.privNum)
+cert = certificate()
+
+privateKey = RSA.generate(3072)
 
 
 def sendPK():  # Connect to CA server and send name + pk
@@ -31,40 +34,34 @@ def sendPK():  # Connect to CA server and send name + pk
     # send public key and modulus
     name = "Alice"
     sendSocket.send(name.encode("utf-8"))
-#    print("sent name")
-    time.sleep(0.5)
-    public_key = str(key_pair["public"])
-    sendSocket.send(public_key.encode("utf-8"))
-#    print("sent public key")
-    time.sleep(0.5)
-    modulus_key = str(key_pair["modulus"])
-    sendSocket.send(modulus_key.encode("utf-8"))
-#    print("sent public modulus")
+    #    print("sent name")
+    time.sleep(1)
+
+    publicKey = privateKey.public_key().export_key()
+    sendSocket.send(publicKey)
+    print("sent public key: " + str(publicKey))
 
     # receive back certificate
+    certif = sendSocket.recv(1024)
+    cert.setCertificate(certif)
+    print("Signed certificate: " + str(cert))
+    signature = sendSocket.recv(1024)
+    print("Signature: " + str(signature))
 
-    msg = sendSocket.recv(1024)
-    msg = msg.decode("utf-8")
-    global CERTIFICATE
-    while msg != "END":
-        CERTIFICATE = CERTIFICATE + msg
-        msg = sendSocket.recv(1024)
-        msg = msg.decode("utf-8")
-#    print("Encrypted certificate: " + CERTIFICATE)
+    receiveCa = sendSocket.recv(1024)
+    print("CA Key: " + str(receiveCa))
+    caKey = RSA.import_key(receiveCa)
+    print("CA Key: " + str(caKey))
 
-
-    # receive CA public key
-    msg = sendSocket.recv(1024)
-    msg = msg.decode("utf-8")
-    msg = msg.split('#')
-    global CA_KEY
-    CA_KEY = msg[0]
-    CA_KEY = int(CA_KEY)
-#    print(CA_KEY)
-    global CA_MODULUS
-    CA_MODULUS = msg[1]
-    CA_MODULUS = int(CA_MODULUS)
-#    print(CA_MODULUS)
+    # message = cert
+    #
+    # h = SHA256.new(message)
+    # verifier = pss.new(caKey)
+    # try:
+    #     verifier.verify(h, signature)
+    #     print("The signature is authentic.")
+    # except ValueError:
+    #     print("The signature is not authentic.")
 
 
 def listen():
@@ -77,18 +74,15 @@ def listen():
     listen_socket.listen(0)
     print(f"Listening on {ip}:{port}")
     client_socket, client_address = listen_socket.accept()
-    bob_key, bob_modulus = verifyIncoming(client_socket)  # Verifies incoming connection (is Bob actually Bob)
+    peer_key = verifyIncoming(client_socket)  # Verifies incoming connection (is Alice actually Alice)
     global PEER_KEY
-    PEER_KEY = bob_key
-    global PEER_MODULUS
-    PEER_MODULUS = bob_modulus
+    PEER_KEY = peer_key
     global VERIFIED
     VERIFIED = True
-#    print("finished verification")
+    print("finished verification")
 
     #obtaining shared secret key
-    secNum = client_socket.recv(1024).decode("utf-8")
-    secNum = eval(rsa.decrypt(secNum, PEER_KEY, PEER_MODULUS))
+    secNum = eval(client_socket.recv(1024).decode("utf-8"))
     #print("SecNum:" + str(secNum))
     diffieHellman.generateSecretKey(secNum)
     sharedKey = diffieHellman.getSecretKey()
@@ -139,61 +133,24 @@ def receive(skt, sharedKey):
         outfile.write(f)
 
 
-
 def verifyIncoming(cskt):
-    receive = cskt.recv(1024)
-    name = receive.decode("utf-8")
-#    print("\n[Bob]: " + name)  # Alice saying who they are
+    message = "Send cert"
+    cskt.send(message.encode("utf-8"))
 
-    nonce = str(random.uniform(0, 1))
-    msg = nonce
-    cskt.send(msg.encode("utf-8"))  # send nonce to Alice
-#    print("sent nonce: " + nonce)
+    receivePeer = cskt.recv(1024)
+    receivePeer = receivePeer.decode("utf-8")
+    print("Receive peer: " + receivePeer)
+    receivePeer = receivePeer.split("#")
 
-    encrypted_nonce = ""
-    receive = cskt.recv(1024)
-    receive = receive.decode("utf-8")  # receive encrypted nonce
-    while receive != "END":
-        encrypted_nonce = encrypted_nonce + receive
-        receive = cskt.recv(1024)
-        receive = receive.decode("utf-8")  # receive encrypted nonce
-#    print("Received encrypted nonce: " + encrypted_nonce)
+    name = receivePeer[0]
+    peerKey = receivePeer[1].encode("utf-8")
+    global PEER_KEY
+    print("Key attempt: ")
+    print(peerKey)
+    PEER_KEY = RSA.import_key(peerKey)
+    print("Peer Key: " + str(PEER_KEY))
 
-    msg = "Send your public key"
-    cskt.send(msg.encode("utf-8"))
-#    print("Message sent: " + msg)
-
-    clientCert = ""
-    receive = cskt.recv(1024)
-    receive = receive.decode("utf-8")
-    while receive != "END":
-        clientCert = clientCert + receive
-        receive = cskt.recv(1024)
-        receive = receive.decode("utf-8")  # receive encrypted nonce
-
-    clientCert = rsa.decrypt(clientCert, CA_KEY, CA_MODULUS)  # decrypt cert
-#    print(clientCert)
-
-    clientCert = clientCert.split('#')
-    cert_name = clientCert[0]
-    bob_key = clientCert[1]
-    bob_modulus = clientCert[2]
-
-    if cert_name == name:
-        print("Bob name confirmed")
-        bob_modulus = int(bob_modulus)
-        bob_key = int(bob_key)
-        decrypted_nonce = rsa.decrypt(encrypted_nonce, bob_key, bob_modulus)
-        print("Decrypted nonce: " + decrypted_nonce)
-        if decrypted_nonce == nonce:
-            print("Bob identity confirmed")
-        else:
-            print("Security breach")
-    else:
-        print("security breach")
-
-    return bob_key, bob_modulus
-
+    return PEER_KEY
 
 def connect():
     triedConnection = False
@@ -214,14 +171,14 @@ def connect():
                 triedConnection = True
             time.sleep(2)
 
+    while not VERIFIED:
+        time.sleep(0.5)
+
     #send secret integer for diffie hellman
     secInt = diffieHellman.getSecretInteger()
-    secInt = rsa.encrypt(str(secInt), key_pair["private"], key_pair["modulus"])
     #print("SecInt:" + str(secInt))
     sendSocket.send(secInt.encode("utf-8"))
 
-    while not VERIFIED:
-        time.sleep(0.5)
 
     msg = ""
     while not msg == "Q":
@@ -252,38 +209,9 @@ def sendMessage(skt):
 
 
 def verify_outgoing(sskt):
-    try:
-        privateKey = key_pair["private"]
-        keyModulus = key_pair["modulus"]
-
-        msg = "Alice"
-        sskt.send(msg.encode("utf-8"))
-
-        receive = sskt.recv(1024)
-        nonce = receive.decode("utf-8")  # receive nonce
-#        print("Received nonce: " + nonce)
-
-        encrypted_nonce = rsa.encrypt(nonce, privateKey, keyModulus)  # Encrypt with private key
-        msg = encrypted_nonce
-        sskt.send(msg.encode("utf-8"))  # send encrypted nonce
-#        print("Sent nonce: " + msg)
-        time.sleep(0.5)
-        msg = "END"
-        sskt.send(msg.encode("utf-8"))  # specify end of encrypted nonce
-
-        receive = sskt.recv(1024)
-        receive = receive.decode("utf-8")  # receive request
-#        print("Received message: " + receive)
-
-        msg = CERTIFICATE
-        sskt.send(msg.encode("utf-8"))  # Send certificate
-        time.sleep(0.5)
-        sskt.send("END".encode("utf-8"))
-
-    except Exception as e:
-        print(e)
-
-    return
+    msg = cert.getCertificate()
+    print("Sending cert: " + msg)
+    sskt.send(msg)  # Send certificate
 
 def main():
     sendPK()

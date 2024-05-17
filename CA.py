@@ -2,10 +2,14 @@ import socket
 import threading
 import queue
 import time
+import Hashing as hash
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import padding
+from Cryptodome.PublicKey import RSA
+from Cryptodome.Signature import pss
+from Cryptodome.Hash import SHA256
 
-from rsa_python import rsa
-
-KEY_PAIR = rsa.generate_key_pair(1024)  # Generates public key immediately
 HOST = "127.0.0.1"
 PORT = 8003
 
@@ -13,36 +17,43 @@ PORT = 8003
 client_queue = queue.Queue()
 
 
+privateKey = RSA.generate(3072)
+
+
 def handle_client(conn, addr):
     print(f'Connected by {addr}')
     while True:
         name = conn.recv(1024)
         name = name.decode("utf-8")
-        print("recived name " + name)
+        print("received name " + name)
 
         pk = conn.recv(1024)  # public key
-        pk = pk.decode("utf-8")
-#        print("recived pk " + pk)
+        print("received pk " + str(pk))
 
-        pm = conn.recv(1024)  # public modulus
-        pm = pm.decode("utf-8")
-#        print("recived modulus " + pm)
+        response = name + "#" + str(pk)
+        response = response.encode('utf-8')
+        print(response)
 
-        response = name + "#" + pk + "#" + pm
-        encrypted_respone = rsa.encrypt(response, KEY_PAIR["private"], KEY_PAIR["modulus"])
-        conn.send(encrypted_respone.encode("utf-8"))
-        time.sleep(0.5)
-        response = "END"
-        conn.send(response.encode("utf-8"))
+        h = SHA256.new(response)
+        signature = pss.new(privateKey).sign(h)
 
-        response = str(KEY_PAIR["public"]) + "#" + str(KEY_PAIR["modulus"])
-        conn.send(response.encode("utf-8"))
+        conn.send(response)
+        print("Sent message: " + str(response))
+        time.sleep(1)
+        conn.send(signature)
+        print("Sent signature: " + str(signature))
+        time.sleep(1)
+
+        response = privateKey.public_key().exportKey()
+        conn.send(response)
+        print("Sent key: " + str(response))
 
         break
     conn.close()
     print(f'Client {addr} closed connection')
     # Signal the next client in line (if any)
     client_queue.put(True)
+
 
 def main():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -59,6 +70,7 @@ def main():
             # Start a new thread to handle the client connection
             client_thread = threading.Thread(target=handle_client, args=(conn, addr))
             client_thread.start()
+
 
 if __name__ == '__main__':
     main()
